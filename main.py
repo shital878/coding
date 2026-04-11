@@ -22,3 +22,4 @@ elif menu == "Order Master":
 
 elif menu == "Records":
     records()
+
