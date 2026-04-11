@@ -1,7 +1,7 @@
 import streamlit as st
 from masala_master import masala_master
 from outlet_onboarding import outlet_onaboard   # ← missing import
-from order_details import order_details 
+from order import order_details 
 from record import records
 
 st.sidebar.title("Product Order System")
