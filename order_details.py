@@ -6,7 +6,7 @@ from db_config import DB_CONFIG
 
 def order_details():
 
-    # ---------------- PAGE CONFIG ----------------
+        # ---------------- PAGE CONFIG ----------------
     st.set_page_config(page_title="Outlet Management System", layout="wide")
 
     # ---------------- CUSTOM CSS ----------------
