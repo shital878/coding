@@ -9,8 +9,6 @@ from db_config import DB_CONFIG
 
 def outlet_onaboard():
 
-    
-
 
     # ---------------- PAGE CONFIG ----------------
     st.set_page_config(page_title="Outlet Management System", layout="wide")
@@ -99,19 +97,19 @@ background-color:#F8C471;
     st.markdown('<div class="main-title">Outlet Management System</div>', unsafe_allow_html=True)
 
 
-    # ---------------- DATABASE CONNECTION ----------------
-    connection = psycopg2.connect(
-    database="maindatabase",
-    user="avnadmin",
-    password="AVNS_qn7sCvj55GiZ2Ghq4Cz",
-    host="pg-3a0c1943-shital878-5c07.g.aivencloud.com",
-    port="18902"
-)
+#     # ---------------- DATABASE CONNECTION ----------------
+#     connection = psycopg2.connect(
+#     database="maindatabase",
+#     user="avnadmin",
+#     password="AVNS_qn7sCvj55GiZ2Ghq4Cz",
+#     host="pg-3a0c1943-shital878-5c07.g.aivencloud.com",
+#     port="18902"
+# )
 
     # ---------------- SIDEBAR ----------------
     st.sidebar.title("Navigation")
 
-    menu = st.sidebar.selectbox(
+    menu = st.sidebar.radio(
         "Menu",
         ["Outlet Registration","Update Outlet","All Outlet"]
     )
