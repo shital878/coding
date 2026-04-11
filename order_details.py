@@ -257,6 +257,6 @@ background-color:#F8C471;
             st.success("Order Updated Successfully")
 
 
-order_details()
+# order_details()
 
 
