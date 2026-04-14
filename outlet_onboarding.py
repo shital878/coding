@@ -13,6 +13,8 @@ def outlet_onaboard():
     # ---------------- PAGE CONFIG ----------------
     st.set_page_config(page_title="Outlet Management System", layout="wide")
 
+
+    
     # ---------------- CUSTOM CSS ----------------
     st.markdown("""
 <style>
@@ -97,6 +99,7 @@ background-color:#F8C471;
     st.markdown('<div class="main-title">Outlet Management System</div>', unsafe_allow_html=True)
 
 
+    connection = psycopg2.connect(**DB_CONFIG)
 #     # ---------------- DATABASE CONNECTION ----------------
 #     connection = psycopg2.connect(
 #     database="maindatabase",
