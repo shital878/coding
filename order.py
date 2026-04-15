@@ -256,112 +256,299 @@ background-color:#F8C471;
 
             st.success("Order Updated Successfully")
 
-    # ================= DELIVERY =================
+
+# ******************************delivery****************
+
+
     elif menu == "Delivery":
 
-        st.subheader("Delivery Update")
+        # ---------------- PAGE TITLE ----------------
+        st.subheader("🚚 Delivery Update")
 
-        # Fetch pending customers
+        # ---------------- FETCH PENDING CUSTOMERS ----------------
         pending_cust_query = """
-        SELECT DISTINCT cust_name 
-        FROM masala_order 
-        WHERE status = 'Pending';
+            SELECT DISTINCT cust_name
+            FROM masala_order
+            WHERE status = 'Pending'
+            ORDER BY cust_name
         """
 
         pending_df = pd.read_sql(pending_cust_query, connection)
 
+        # ---------------- NO DATA CASE ----------------
         if pending_df.empty:
-            st.warning("No pending customers")
-        else:
-            cust_name = st.selectbox("Select Customer", pending_df["cust_name"])
+            st.warning("No pending customers found")
+            st.stop()
 
-            # Fetch pending items
-            items_query = """
-            SELECT seq, masala_name, qty, rate 
-            FROM masala_order 
-            WHERE status = 'Pending' 
+        # ---------------- CUSTOMER SELECTION ----------------
+        cust_name = st.selectbox(
+            "Select Customer",
+            pending_df["cust_name"],
+            index=0
+        )
+
+        # ---------------- FETCH CUSTOMER ITEMS ----------------
+        items_query = """
+            SELECT seq, masala_name, qty, rate
+            FROM masala_order
+            WHERE status = 'Pending'
             AND cust_name = %s
-            """
+            ORDER BY seq
+        """
 
-            items_df = pd.read_sql(items_query, connection, params=(cust_name,))
+        items_df = pd.read_sql(items_query, connection, params=(cust_name,))
 
-            if items_df.empty:
-                st.warning("No pending items")
-            else:
+        # ---------------- NO ITEMS ----------------
+        if items_df.empty:
+            st.warning("No pending items for selected customer")
+            st.stop()
 
-                st.write("Enter Delivered Quantity:")
+        st.markdown("### 📦 Order Details")
 
-                delivery_data = []
+        # ---------------- HEADER ROW ----------------
+        h1, h2, h3, h4 = st.columns([3, 1.5, 1.5, 2])
+        h1.markdown("**Masala Name**")
+        h2.markdown("**Ordered Qty**")
+        h3.markdown("**Rate**")
+        h4.markdown("**Delivered Qty**")
 
-                for _, row in items_df.iterrows():
+        # ---------------- STORE DATA ----------------
+        delivery_data = []
 
-                    seq = row["seq"]
-                    masala_name = row["masala_name"]
-                    ordered_qty = row["qty"]
-                    rate = row["rate"]
+        # ---------------- LOOP ITEMS ----------------
+        for _, row in items_df.iterrows():
 
-                    col1, col2, col3 = st.columns([2,1,1])
+            seq = int(row["seq"])
+            masala_name = row["masala_name"]
+            ordered_qty = int(row["qty"])
+            rate = float(row["rate"])
 
-                    col1.write(f"**{masala_name}**")
-                    col2.write(f"Ordered: {ordered_qty}")
+            col1, col2, col3, col4 = st.columns([3, 1.5, 1.5, 2])
 
-                    # ✅ Only Qty input (NO dropdown)
-                    delivered_qty = col3.number_input(
-                        "Delivered Qty",
-                        min_value=0,
-                        max_value=int(ordered_qty),
-                        value=int(ordered_qty),
-                        key=f"qty_{seq}"
-                    )
+            col1.write(masala_name)
+            col2.write(ordered_qty)
+            col3.write(f"₹ {rate:.2f}")
 
-                    delivery_data.append((seq, masala_name, ordered_qty, delivered_qty, rate))
+            # delivered_qty = col4.number_input(
+            #     label="",
+            #     min_value=0,
+            #     max_value=ordered_qty,
+            #     value=ordered_qty,
+            #     step=1,
+            #     key=f"del_qty_{seq}"
+            # )
 
-                # ---------------- UPDATE BUTTON ----------------
-                if st.button("Update Delivery"):
+            delivered_qty = col4.number_input(
+    "Delivered Qty",
+    min_value=0,
+    max_value=ordered_qty,
+    value=ordered_qty,
+    step=1,
+    key=f"del_qty_{seq}",
+    label_visibility="collapsed"
+)
 
-                    cursor = connection.cursor()
+            delivery_data.append({
+                "seq": seq,
+                "name": masala_name,
+                "ordered": ordered_qty,
+                "delivered": delivered_qty,
+                "rate": rate
+            })
 
-                    for data in delivery_data:
+        # ---------------- BUTTONS ----------------
+        st.markdown("---")
+        btn1, btn2 = st.columns(2)
 
-                        seq, masala_name, ordered_qty, delivered_qty, rate = data
+        # ================= UPDATE DELIVERY =================
+        with btn1:
+            if st.button("✅ Update Delivery", use_container_width=True):
 
-                        # Validation
-                        if delivered_qty < 0:
-                            st.error(f"Invalid qty for {masala_name}")
-                            continue
+                cursor = connection.cursor()
 
-                        if delivered_qty > ordered_qty:
-                            st.error(f"Delivered qty cannot exceed ordered for {masala_name}")
-                            continue
+                for item in delivery_data:
 
-                        # ✅ Auto Status Logic
-                        if delivered_qty == ordered_qty:
-                            status = "Delivered"
-                        elif delivered_qty == 0:
-                            status = "Pending"
-                        else:
-                            status = "Partial"
+                    seq = item["seq"]
+                    masala_name = item["name"]
+                    ordered_qty = item["ordered"]
+                    delivered_qty = item["delivered"]
+                    rate = item["rate"]
 
-                        amount_del = delivered_qty * rate
+                    # -------- VALIDATION --------
+                    if delivered_qty < 0:
+                        st.error(f"{masala_name}: Invalid quantity")
+                        continue
 
-                        cursor.execute("""
-                            UPDATE masala_order
-                            SET qty_del = %s,
-                                amount_del = %s,
-                                business_date_del = CURRENT_DATE,
-                                order_time_del = CURRENT_TIMESTAMP,
-                                status = %s
-                            WHERE seq = %s
-                        """, (
-                            delivered_qty,
-                            amount_del,
-                            status,
-                            seq
-                        ))
+                    if delivered_qty > ordered_qty:
+                        st.error(f"{masala_name}: Delivered > Ordered not allowed")
+                        continue
 
-                    connection.commit()
+                    # -------- STATUS LOGIC --------
+                    if delivered_qty == ordered_qty:
+                        status = "Delivered"
+                    elif delivered_qty == 0:
+                        status = "Pending"
+                    else:
+                        status = "Partial"
 
-                    st.success(f"Delivery updated for {cust_name} ✅")
+                    amount_del = delivered_qty * rate
+
+                    # -------- UPDATE QUERY --------
+                    cursor.execute("""
+                        UPDATE masala_order
+                        SET qty_del = %s,
+                            amount_del = %s,
+                            business_date_del = CURRENT_DATE,
+                            order_time_del = CURRENT_TIMESTAMP,
+                            status = %s
+                        WHERE seq = %s
+                    """, (
+                        delivered_qty,
+                        amount_del,
+                        status,
+                        seq
+                    ))
+
+                connection.commit()
+                cursor.close()
+
+                st.success(f"Delivery updated successfully for {cust_name} ✅")
+
+        # ================= CANCEL ORDER =================
+        with btn2:
+
+            confirm_cancel = st.checkbox("Confirm Cancel Order")
+
+            if st.button("❌ Cancel Order", use_container_width=True):
+
+                if not confirm_cancel:
+                    st.warning("Please confirm cancellation first")
+                    st.stop()
+
+                cursor = connection.cursor()
+
+                cursor.execute("""
+                    UPDATE masala_order
+                    SET status = 'Cancelled',
+                        qty_del = 0,
+                        amount_del = 0,
+                        business_date_del = CURRENT_DATE,
+                        order_time_del = CURRENT_TIMESTAMP
+                    WHERE cust_name = %s
+                    AND status = 'Pending'
+                """, (cust_name,))
+
+                connection.commit()
+                cursor.close()
+
+                st.error(f"Order cancelled for {cust_name} ❌")
+
+    # ================= DELIVERY =================
+    # elif menu == "Delivery":
+
+    #     st.subheader("Delivery Update")
+
+    #     # Fetch pending customers
+    #     pending_cust_query = """
+    #     SELECT DISTINCT cust_name 
+    #     FROM masala_order 
+    #     WHERE status = 'Pending';
+    #     """
+
+    #     pending_df = pd.read_sql(pending_cust_query, connection)
+
+    #     if pending_df.empty:
+    #         st.warning("No pending customers")
+    #     else:
+    #         cust_name = st.selectbox("Select Customer", pending_df["cust_name"])
+
+    #         # Fetch pending items
+    #         items_query = """
+    #         SELECT seq, masala_name, qty, rate 
+    #         FROM masala_order 
+    #         WHERE status = 'Pending' 
+    #         AND cust_name = %s
+    #         """
+
+    #         items_df = pd.read_sql(items_query, connection, params=(cust_name,))
+
+    #         if items_df.empty:
+    #             st.warning("No pending items")
+    #         else:
+
+    #             st.write("Enter Delivered Quantity:")
+
+    #             delivery_data = []
+
+    #             for _, row in items_df.iterrows():
+
+    #                 seq = row["seq"]
+    #                 masala_name = row["masala_name"]
+    #                 ordered_qty = row["qty"]
+    #                 rate = row["rate"]
+
+    #                 col1, col2, col3 = st.columns([2,1,1])
+
+    #                 col1.write(f"**{masala_name}**")
+    #                 col2.write(f"Ordered: {ordered_qty}")
+
+    #                 # ✅ Only Qty input (NO dropdown)
+    #                 delivered_qty = col3.number_input(
+    #                     "Delivered Qty",
+    #                     min_value=0,
+    #                     max_value=int(ordered_qty),
+    #                     value=int(ordered_qty),
+    #                     key=f"qty_{seq}"
+    #                 )
+
+    #                 delivery_data.append((seq, masala_name, ordered_qty, delivered_qty, rate))
+
+    #             # ---------------- UPDATE BUTTON ----------------
+    #             if st.button("Update Delivery"):
+
+    #                 cursor = connection.cursor()
+
+    #                 for data in delivery_data:
+
+    #                     seq, masala_name, ordered_qty, delivered_qty, rate = data
+
+    #                     # Validation
+    #                     if delivered_qty < 0:
+    #                         st.error(f"Invalid qty for {masala_name}")
+    #                         continue
+
+    #                     if delivered_qty > ordered_qty:
+    #                         st.error(f"Delivered qty cannot exceed ordered for {masala_name}")
+    #                         continue
+
+    #                     # ✅ Auto Status Logic
+    #                     if delivered_qty == ordered_qty:
+    #                         status = "Delivered"
+    #                     elif delivered_qty == 0:
+    #                         status = "Pending"
+    #                     else:
+    #                         status = "Partial"
+
+    #                     amount_del = delivered_qty * rate
+
+    #                     cursor.execute("""
+    #                         UPDATE masala_order
+    #                         SET qty_del = %s,
+    #                             amount_del = %s,
+    #                             business_date_del = CURRENT_DATE,
+    #                             order_time_del = CURRENT_TIMESTAMP,
+    #                             status = %s
+    #                         WHERE seq = %s
+    #                     """, (
+    #                         delivered_qty,
+    #                         amount_del,
+    #                         status,
+    #                         seq
+    #                     ))
+
+    #                 connection.commit()
+
+    #                 st.success(f"Delivery updated for {cust_name} ✅")
 
 
 
@@ -593,8 +780,6 @@ background-color:#F8C471;
 
     # #     st.success(f"All items for {cust_name} marked as Delivered ✅")
     
-
-
 
 
 
