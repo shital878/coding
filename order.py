@@ -4,6 +4,11 @@ import psycopg2
 from datetime import datetime
 from db_config import DB_CONFIG
 
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
+
 def order_details():
 
         # ---------------- PAGE CONFIG ----------------
@@ -98,7 +103,7 @@ background-color:#F8C471;
     connection = psycopg2.connect(**DB_CONFIG)
     cursor = connection.cursor()
 
-    menu = st.sidebar.radio("Order", ["Order","Update","Delivery"])
+    menu = st.sidebar.radio("Order", ["Order","Update","Delivery","Bill"])
     query = "SELECT * FROM masala_master"
     df = pd.read_sql(query, connection)
 
@@ -414,6 +419,75 @@ background-color:#F8C471;
 
                 st.success(f"Delivery updated successfully for {cust_name} ✅")
 
+                                # ===== FETCH UPDATED DATA FROM DB =====
+                bill_query = """
+                    SELECT masala_name, qty_del, rate
+                    FROM masala_order
+                    WHERE cust_name = %s
+                    AND status IN ('Delivered','Partial')
+                    AND business_date_del = CURRENT_DATE
+                """
+                bill_df = pd.read_sql(bill_query, connection, params=(cust_name,))
+
+                if bill_df.empty:
+                    st.warning("No delivered items found for billing")
+                    st.stop()
+
+                # ===== PREPARE DATA =====
+                total = 0
+                table_data = [["Masala", "Qty", "Rate", "Amount"]]
+
+                for _, row in bill_df.iterrows():
+                    amount = row["qty_del"] * row["rate"]
+                    total += amount
+
+                    table_data.append([
+                        row["masala_name"],
+                        int(row["qty_del"]),
+                        f"₹ {row['rate']:.2f}",
+                        f"₹ {amount:.2f}"
+                    ])
+
+                table_data.append(["", "", "Total", f"₹ {total:.2f}"])
+
+                # ===== GENERATE PDF =====
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer)
+                elements = []
+                styles = getSampleStyleSheet()
+
+                # Title
+                elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
+                elements.append(Spacer(1, 10))
+
+                # Customer info
+                elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
+                elements.append(Paragraph(f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
+                elements.append(Spacer(1, 10))
+
+                # Table
+                table = Table(table_data)
+
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                ]))
+
+                elements.append(table)
+
+                doc.build(elements)
+                buffer.seek(0)
+
+                # ===== DOWNLOAD BUTTON =====
+                st.download_button(
+                    label="📄 Download Bill PDF",
+                    data=buffer,
+                    file_name=f"{cust_name}_bill.pdf",
+                    mime="application/pdf"
+                )
+
         # ================= CANCEL ORDER =================
         with btn2:
 
@@ -442,6 +516,145 @@ background-color:#F8C471;
                 cursor.close()
 
                 st.error(f"Order cancelled for {cust_name} ❌")
+
+        # ================= BILL PAGE =================
+            # ================= BILL PAGE =================
+    elif menu == "Bill":
+
+        st.subheader("🧾 Generate Customer Bill")
+
+        # -------- FETCH CUSTOMERS --------
+        bill_cust_query = """
+            SELECT DISTINCT cust_name
+            FROM masala_order
+            WHERE status IN ('Delivered','Partial')
+            ORDER BY cust_name
+        """
+        bill_cust_df = pd.read_sql(bill_cust_query, connection)
+
+        if bill_cust_df.empty:
+            st.warning("No delivered customers found")
+            st.stop()
+
+        # -------- SIDE BY SIDE SELECT BOXES --------
+        col1, col2 = st.columns(2)
+
+        with col1:
+            cust_name = st.selectbox(
+                "Select Customer",
+                bill_cust_df["cust_name"]
+            )
+
+        # -------- FETCH DATES BASED ON CUSTOMER --------
+        date_query = """
+            SELECT DISTINCT business_date_del
+            FROM masala_order
+            WHERE cust_name = %s
+            AND status IN ('Delivered','Partial')
+            ORDER BY business_date_del DESC
+        """
+        date_df = pd.read_sql(date_query, connection, params=(cust_name,))
+
+        if date_df.empty:
+            st.warning("No delivery dates found for this customer")
+            st.stop()
+
+        with col2:
+            selected_date = st.selectbox(
+                "Select Delivery Date",
+                date_df["business_date_del"]
+            )
+
+        # -------- FETCH BILL DATA --------
+        bill_query = """
+            SELECT masala_name, qty_del, rate
+            FROM masala_order
+            WHERE cust_name = %s
+            AND status IN ('Delivered','Partial')
+            AND business_date_del = %s
+        """
+        bill_df = pd.read_sql(bill_query, connection, params=(cust_name, selected_date))
+
+        if bill_df.empty:
+            st.warning("No delivered items found")
+            st.stop()
+
+        st.markdown("### 📦 Delivered Items")
+
+        # -------- DISPLAY TABLE --------
+        total = 0
+        display_data = []
+
+        for _, row in bill_df.iterrows():
+            amount = row["qty_del"] * row["rate"]
+            total += amount
+
+            display_data.append({
+                "Masala": row["masala_name"],
+                "Qty": int(row["qty_del"]),
+                "Rate": f"₹ {row['rate']:.2f}",
+                "Amount": f"₹ {amount:.2f}"
+            })
+
+        st.dataframe(display_data, use_container_width=True)
+        st.markdown(f"### 💰 Total: ₹ {total:.2f}")
+
+        # -------- GENERATE PDF --------
+        if st.button("📄 Generate & Download Bill"):
+
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib import colors
+            from reportlab.lib.styles import getSampleStyleSheet
+            from io import BytesIO
+
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer)
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Title
+            elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
+            elements.append(Spacer(1, 10))
+
+            # Customer + Date
+            elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
+            elements.append(Paragraph(f"Delivery Date: {selected_date}", styles['Normal']))
+            elements.append(Spacer(1, 10))
+
+            # Table
+            table_data = [["Masala", "Qty", "Rate", "Amount"]]
+
+            for row in display_data:
+                table_data.append([
+                    row["Masala"],
+                    row["Qty"],
+                    row["Rate"],
+                    row["Amount"]
+                ])
+
+            table_data.append(["", "", "Total", f"₹ {total:.2f}"])
+
+            table = Table(table_data)
+
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+            ]))
+
+            elements.append(table)
+
+            doc.build(elements)
+            buffer.seek(0)
+
+            st.download_button(
+                label="⬇ Download PDF",
+                data=buffer,
+                file_name=f"{cust_name}_{selected_date}_bill.pdf",
+                mime="application/pdf"
+            )
+            
 
     # ================= DELIVERY =================
     # elif menu == "Delivery":
