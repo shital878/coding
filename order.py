@@ -4,10 +4,10 @@ import psycopg2
 from datetime import datetime
 from db_config import DB_CONFIG
 
-from io import BytesIO
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
+# from io import BytesIO
+# from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+# from reportlab.lib import colors
+# from reportlab.lib.styles import getSampleStyleSheet
 
 
 def order_details():
@@ -452,11 +452,11 @@ background-color:#F8C471;
                 table_data.append(["", "", "Total", f"₹ {total:.2f}"])
 
                 # ===== GENERATE PDF =====
-
+                from io import BytesIO
                 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
                 from reportlab.lib import colors
                 from reportlab.lib.styles import getSampleStyleSheet
-                from io import BytesIO
+                
 
                 buffer = BytesIO()
                 doc = SimpleDocTemplate(buffer)
