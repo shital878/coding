@@ -4,10 +4,11 @@ import psycopg2
 from datetime import datetime
 from db_config import DB_CONFIG
 
+from io import BytesIO
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from io import BytesIO
+
 
 def order_details():
 
@@ -451,6 +452,12 @@ background-color:#F8C471;
                 table_data.append(["", "", "Total", f"₹ {total:.2f}"])
 
                 # ===== GENERATE PDF =====
+
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                from reportlab.lib import colors
+                from reportlab.lib.styles import getSampleStyleSheet
+                from io import BytesIO
+
                 buffer = BytesIO()
                 doc = SimpleDocTemplate(buffer)
                 elements = []
@@ -518,7 +525,7 @@ background-color:#F8C471;
                 st.error(f"Order cancelled for {cust_name} ❌")
 
         # ================= BILL PAGE =================
-            # ================= BILL PAGE =================
+        
     elif menu == "Bill":
 
         st.subheader("🧾 Generate Customer Bill")
