@@ -524,143 +524,610 @@ background-color:#F8C471;
 
                 st.error(f"Order cancelled for {cust_name} ❌")
 
-        # ================= BILL PAGE =================
-        
+       
+       
+       # ================= BILL PAGE =================
+
     elif menu == "Bill":
 
         st.subheader("🧾 Generate Customer Bill")
 
-        # -------- FETCH CUSTOMERS --------
-        bill_cust_query = """
-            SELECT DISTINCT cust_name
-            FROM masala_order
-            WHERE status IN ('Delivered','Partial')
-            ORDER BY cust_name
-        """
-        bill_cust_df = pd.read_sql(bill_cust_query, connection)
+        # ================= BILL TYPE =================
 
-        if bill_cust_df.empty:
-            st.warning("No delivered customers found")
-            st.stop()
+        bill_type = st.radio(
+            "Select Bill Type",
+            ["Delivered", "Pending"],
+            horizontal=True
+        )
 
-        # -------- SIDE BY SIDE SELECT BOXES --------
-        col1, col2 = st.columns(2)
+        # =========================================================
+        # ================= DELIVERED BILL ========================
+        # =========================================================
 
-        with col1:
-            cust_name = st.selectbox(
-                "Select Customer",
-                bill_cust_df["cust_name"]
+        if bill_type == "Delivered":
+
+            # -------- FETCH CUSTOMERS --------
+
+            bill_cust_query = """
+                SELECT DISTINCT cust_name
+                FROM masala_order
+                WHERE status IN ('Delivered','Partial')
+                ORDER BY cust_name
+            """
+
+            bill_cust_df = pd.read_sql(
+                bill_cust_query,
+                connection
             )
 
-        # -------- FETCH DATES BASED ON CUSTOMER --------
-        date_query = """
-            SELECT DISTINCT business_date_del
-            FROM masala_order
-            WHERE cust_name = %s
-            AND status IN ('Delivered','Partial')
-            ORDER BY business_date_del DESC
-        """
-        date_df = pd.read_sql(date_query, connection, params=(cust_name,))
+            if bill_cust_df.empty:
+                st.warning("No delivered customers found")
+                st.stop()
 
-        if date_df.empty:
-            st.warning("No delivery dates found for this customer")
-            st.stop()
+            # -------- SELECT BOXES --------
 
-        with col2:
-            selected_date = st.selectbox(
-                "Select Delivery Date",
-                date_df["business_date_del"]
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                cust_name = st.selectbox(
+                    "Select Customer",
+                    bill_cust_df["cust_name"],
+                    key="del_customer"
+                )
+
+            # -------- FETCH DELIVERY DATES --------
+
+            date_query = """
+                SELECT DISTINCT business_date_del
+                FROM masala_order
+                WHERE cust_name = %s
+                AND status IN ('Delivered','Partial')
+                ORDER BY business_date_del DESC
+            """
+
+            date_df = pd.read_sql(
+                date_query,
+                connection,
+                params=(cust_name,)
             )
 
-        # -------- FETCH BILL DATA --------
-        bill_query = """
-            SELECT masala_name, qty_del, rate
-            FROM masala_order
-            WHERE cust_name = %s
-            AND status IN ('Delivered','Partial')
-            AND business_date_del = %s
-        """
-        bill_df = pd.read_sql(bill_query, connection, params=(cust_name, selected_date))
+            if date_df.empty:
+                st.warning("No delivery dates found")
+                st.stop()
 
-        if bill_df.empty:
-            st.warning("No delivered items found")
-            st.stop()
+            with col2:
 
-        st.markdown("### 📦 Delivered Items")
+                selected_date = st.selectbox(
+                    "Select Delivery Date",
+                    date_df["business_date_del"],
+                    key="del_date"
+                )
 
-        # -------- DISPLAY TABLE --------
-        total = 0
-        display_data = []
+            # -------- FETCH BILL DATA --------
 
-        for _, row in bill_df.iterrows():
-            amount = row["qty_del"] * row["rate"]
-            total += amount
+            bill_query = """
+                SELECT
+                    masala_name,
+                    qty_del,
+                    rate
+                FROM masala_order
+                WHERE cust_name = %s
+                AND status IN ('Delivered','Partial')
+                AND business_date_del = %s
+            """
 
-            display_data.append({
-                "Masala": row["masala_name"],
-                "Qty": int(row["qty_del"]),
-                "Rate": f"₹ {row['rate']:.2f}",
-                "Amount": f"₹ {amount:.2f}"
-            })
+            bill_df = pd.read_sql(
+                bill_query,
+                connection,
+                params=(cust_name, selected_date)
+            )
 
-        st.dataframe(display_data, use_container_width=True)
-        st.markdown(f"### 💰 Total: ₹ {total:.2f}")
+            if bill_df.empty:
+                st.warning("No delivered items found")
+                st.stop()
 
-        # -------- GENERATE PDF --------
-        if st.button("📄 Generate & Download Bill"):
+            st.markdown("### 📦 Delivered Items")
 
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-            from reportlab.lib import colors
-            from reportlab.lib.styles import getSampleStyleSheet
-            from io import BytesIO
+            # -------- DISPLAY TABLE --------
 
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer)
-            elements = []
-            styles = getSampleStyleSheet()
+            total = 0
+            display_data = []
 
-            # Title
-            elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
-            elements.append(Spacer(1, 10))
+            for _, row in bill_df.iterrows():
 
-            # Customer + Date
-            elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
-            elements.append(Paragraph(f"Delivery Date: {selected_date}", styles['Normal']))
-            elements.append(Spacer(1, 10))
+                amount = row["qty_del"] * row["rate"]
 
-            # Table
-            table_data = [["Masala", "Qty", "Rate", "Amount"]]
+                total += amount
 
-            for row in display_data:
+                display_data.append({
+                    "Masala": row["masala_name"],
+                    "Qty": int(row["qty_del"]),
+                    "Rate": f"₹ {row['rate']:.2f}",
+                    "Amount": f"₹ {amount:.2f}"
+                })
+
+            st.dataframe(
+                display_data,
+                use_container_width=True
+            )
+
+            st.markdown(f"### 💰 Total: ₹ {total:.2f}")
+
+            # -------- GENERATE PDF --------
+
+            if st.button("📄 Generate & Download Delivered Bill"):
+
+                from reportlab.platypus import (
+                    SimpleDocTemplate,
+                    Table,
+                    TableStyle,
+                    Paragraph,
+                    Spacer
+                )
+
+                from reportlab.lib import colors
+                from reportlab.lib.styles import getSampleStyleSheet
+                from io import BytesIO
+
+                buffer = BytesIO()
+
+                doc = SimpleDocTemplate(buffer)
+
+                elements = []
+
+                styles = getSampleStyleSheet()
+
+                # ===== TITLE =====
+
+                elements.append(
+                    Paragraph(
+                        "MASALA DELIVERY BILL",
+                        styles['Title']
+                    )
+                )
+
+                elements.append(Spacer(1, 10))
+
+                # ===== CUSTOMER =====
+
+                elements.append(
+                    Paragraph(
+                        f"Customer: {cust_name}",
+                        styles['Normal']
+                    )
+                )
+
+                elements.append(
+                    Paragraph(
+                        f"Delivery Date: {selected_date}",
+                        styles['Normal']
+                    )
+                )
+
+                elements.append(Spacer(1, 10))
+
+                # ===== TABLE =====
+
+                table_data = [
+                    ["Masala", "Qty", "Rate", "Amount"]
+                ]
+
+                for row in display_data:
+
+                    table_data.append([
+                        row["Masala"],
+                        row["Qty"],
+                        row["Rate"],
+                        row["Amount"]
+                    ])
+
                 table_data.append([
-                    row["Masala"],
-                    row["Qty"],
-                    row["Rate"],
-                    row["Amount"]
+                    "",
+                    "",
+                    "Total",
+                    f"₹ {total:.2f}"
                 ])
 
-            table_data.append(["", "", "Total", f"₹ {total:.2f}"])
+                table = Table(table_data)
 
-            table = Table(table_data)
+                table.setStyle(TableStyle([
 
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-            ]))
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
 
-            elements.append(table)
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
 
-            doc.build(elements)
-            buffer.seek(0)
+                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
 
-            st.download_button(
-                label="⬇ Download PDF",
-                data=buffer,
-                file_name=f"{cust_name}_{selected_date}_bill.pdf",
-                mime="application/pdf"
+                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+
+                ]))
+
+                elements.append(table)
+
+                doc.build(elements)
+
+                buffer.seek(0)
+
+                st.download_button(
+                    label="⬇ Download Delivered PDF",
+                    data=buffer,
+                    file_name=f"{cust_name}_{selected_date}_delivered_bill.pdf",
+                    mime="application/pdf"
+                )
+
+        # =========================================================
+        # ================= PENDING BILL ==========================
+        # =========================================================
+
+        elif bill_type == "Pending":
+
+            # -------- FETCH CUSTOMERS --------
+
+            pending_cust_query = """
+                SELECT DISTINCT cust_name
+                FROM masala_order
+                WHERE status = 'Pending'
+                ORDER BY cust_name
+            """
+
+            pending_cust_df = pd.read_sql(
+                pending_cust_query,
+                connection
             )
+
+            if pending_cust_df.empty:
+                st.warning("No pending customers found")
+                st.stop()
+
+            # -------- SELECT BOXES --------
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                cust_name = st.selectbox(
+                    "Select Pending Customer",
+                    pending_cust_df["cust_name"],
+                    key="pending_customer"
+                )
+
+            # -------- FETCH PENDING DATES --------
+
+            pending_date_query = """
+                SELECT DISTINCT business_date
+                FROM masala_order
+                WHERE cust_name = %s
+                AND status = 'Pending'
+                ORDER BY business_date DESC
+            """
+
+            pending_date_df = pd.read_sql(
+                pending_date_query,
+                connection,
+                params=(cust_name,)
+            )
+
+            if pending_date_df.empty:
+                st.warning("No pending dates found")
+                st.stop()
+
+            with col2:
+
+                selected_pending_date = st.selectbox(
+                    "Select Pending Date",
+                    pending_date_df["business_date"],
+                    key="pending_date"
+                )
+
+            # -------- FETCH PENDING ITEMS --------
+
+            pending_bill_query = """
+                SELECT
+                    masala_name,
+                    qty,
+                    rate
+                FROM masala_order
+                WHERE cust_name = %s
+                AND status = 'Pending'
+                AND business_date = %s
+            """
+
+            pending_bill_df = pd.read_sql(
+                pending_bill_query,
+                connection,
+                params=(
+                    cust_name,
+                    selected_pending_date
+                )
+            )
+
+            if pending_bill_df.empty:
+                st.warning("No pending items found")
+                st.stop()
+
+            st.markdown("### 📦 Pending Items")
+
+            # -------- DISPLAY TABLE --------
+
+            pending_total = 0
+
+            pending_display_data = []
+
+            for _, row in pending_bill_df.iterrows():
+
+                amount = row["qty"] * row["rate"]
+
+                pending_total += amount
+
+                pending_display_data.append({
+
+                    "Masala": row["masala_name"],
+
+                    "Qty": int(row["qty"]),
+
+                    "Rate": f"₹ {row['rate']:.2f}",
+
+                    "Amount": f"₹ {amount:.2f}"
+                })
+
+            st.dataframe(
+                pending_display_data,
+                use_container_width=True
+            )
+
+            st.markdown(
+                f"### 💰 Pending Total: ₹ {pending_total:.2f}"
+            )
+
+            # -------- GENERATE PDF --------
+
+            if st.button("📄 Generate & Download Pending Bill"):
+
+                from reportlab.platypus import (
+                    SimpleDocTemplate,
+                    Table,
+                    TableStyle,
+                    Paragraph,
+                    Spacer
+                )
+
+                from reportlab.lib import colors
+                from reportlab.lib.styles import getSampleStyleSheet
+                from io import BytesIO
+
+                buffer = BytesIO()
+
+                doc = SimpleDocTemplate(buffer)
+
+                elements = []
+
+                styles = getSampleStyleSheet()
+
+                # ===== TITLE =====
+
+                elements.append(
+                    Paragraph(
+                        "MASALA PENDING BILL",
+                        styles['Title']
+                    )
+                )
+
+                elements.append(Spacer(1, 10))
+
+                # ===== CUSTOMER =====
+
+                elements.append(
+                    Paragraph(
+                        f"Customer: {cust_name}",
+                        styles['Normal']
+                    )
+                )
+
+                elements.append(
+                    Paragraph(
+                        f"Pending Date: {selected_pending_date}",
+                        styles['Normal']
+                    )
+                )
+
+                elements.append(Spacer(1, 10))
+
+                # ===== TABLE =====
+
+                table_data = [
+                    ["Masala", "Qty", "Rate", "Amount"]
+                ]
+
+                for row in pending_display_data:
+
+                    table_data.append([
+                        row["Masala"],
+                        row["Qty"],
+                        row["Rate"],
+                        row["Amount"]
+                    ])
+
+                table_data.append([
+                    "",
+                    "",
+                    "Total",
+                    f"₹ {pending_total:.2f}"
+                ])
+
+                table = Table(table_data)
+
+                table.setStyle(TableStyle([
+
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.orange),
+
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+
+                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
+
+                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+
+                ]))
+
+                elements.append(table)
+
+                doc.build(elements)
+
+                buffer.seek(0)
+
+                st.download_button(
+                    label="⬇ Download Pending PDF",
+                    data=buffer,
+                    file_name=f"{cust_name}_{selected_pending_date}_pending_bill.pdf",
+                    mime="application/pdf"
+                )    
+
+       
+    #     # ================= BILL PAGE =================
+        
+    # elif menu == "Bill":
+
+    #     st.subheader("🧾 Generate Customer Bill")
+
+    #     # -------- FETCH CUSTOMERS --------
+    #     bill_cust_query = """
+    #         SELECT DISTINCT cust_name
+    #         FROM masala_order
+    #         WHERE status IN ('Delivered','Partial')
+    #         ORDER BY cust_name
+    #     """
+    #     bill_cust_df = pd.read_sql(bill_cust_query, connection)
+
+    #     if bill_cust_df.empty:
+    #         st.warning("No delivered customers found")
+    #         st.stop()
+
+    #     # -------- SIDE BY SIDE SELECT BOXES --------
+    #     col1, col2 = st.columns(2)
+
+    #     with col1:
+    #         cust_name = st.selectbox(
+    #             "Select Customer",
+    #             bill_cust_df["cust_name"]
+    #         )
+
+    #     # -------- FETCH DATES BASED ON CUSTOMER --------
+    #     date_query = """
+    #         SELECT DISTINCT business_date_del
+    #         FROM masala_order
+    #         WHERE cust_name = %s
+    #         AND status IN ('Delivered','Partial')
+    #         ORDER BY business_date_del DESC
+    #     """
+    #     date_df = pd.read_sql(date_query, connection, params=(cust_name,))
+
+    #     if date_df.empty:
+    #         st.warning("No delivery dates found for this customer")
+    #         st.stop()
+
+    #     with col2:
+    #         selected_date = st.selectbox(
+    #             "Select Delivery Date",
+    #             date_df["business_date_del"]
+    #         )
+
+    #     # -------- FETCH BILL DATA --------
+    #     bill_query = """
+    #         SELECT masala_name, qty_del, rate
+    #         FROM masala_order
+    #         WHERE cust_name = %s
+    #         AND status IN ('Delivered','Partial')
+    #         AND business_date_del = %s
+    #     """
+    #     bill_df = pd.read_sql(bill_query, connection, params=(cust_name, selected_date))
+
+    #     if bill_df.empty:
+    #         st.warning("No delivered items found")
+    #         st.stop()
+
+    #     st.markdown("### 📦 Delivered Items")
+
+    #     # -------- DISPLAY TABLE --------
+    #     total = 0
+    #     display_data = []
+
+    #     for _, row in bill_df.iterrows():
+    #         amount = row["qty_del"] * row["rate"]
+    #         total += amount
+
+    #         display_data.append({
+    #             "Masala": row["masala_name"],
+    #             "Qty": int(row["qty_del"]),
+    #             "Rate": f"₹ {row['rate']:.2f}",
+    #             "Amount": f"₹ {amount:.2f}"
+    #         })
+
+    #     st.dataframe(display_data, use_container_width=True)
+    #     st.markdown(f"### 💰 Total: ₹ {total:.2f}")
+
+    #     # -------- GENERATE PDF --------
+    #     if st.button("📄 Generate & Download Bill"):
+
+    #         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    #         from reportlab.lib import colors
+    #         from reportlab.lib.styles import getSampleStyleSheet
+    #         from io import BytesIO
+
+    #         buffer = BytesIO()
+    #         doc = SimpleDocTemplate(buffer)
+    #         elements = []
+    #         styles = getSampleStyleSheet()
+
+    #         # Title
+    #         elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
+    #         elements.append(Spacer(1, 10))
+
+    #         # Customer + Date
+    #         elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
+    #         elements.append(Paragraph(f"Delivery Date: {selected_date}", styles['Normal']))
+    #         elements.append(Spacer(1, 10))
+
+    #         # Table
+    #         table_data = [["Masala", "Qty", "Rate", "Amount"]]
+
+    #         for row in display_data:
+    #             table_data.append([
+    #                 row["Masala"],
+    #                 row["Qty"],
+    #                 row["Rate"],
+    #                 row["Amount"]
+    #             ])
+
+    #         table_data.append(["", "", "Total", f"₹ {total:.2f}"])
+
+    #         table = Table(table_data)
+
+    #         table.setStyle(TableStyle([
+    #             ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+    #             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+    #             ("GRID", (0, 0), (-1, -1), 1, colors.black),
+    #             ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+    #         ]))
+
+    #         elements.append(table)
+
+    #         doc.build(elements)
+    #         buffer.seek(0)
+
+    #         st.download_button(
+    #             label="⬇ Download PDF",
+    #             data=buffer,
+    #             file_name=f"{cust_name}_{selected_date}_bill.pdf",
+    #             mime="application/pdf"
+    #         )
             
 
     # ================= DELIVERY =================
