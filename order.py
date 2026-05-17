@@ -421,79 +421,307 @@ background-color:#F8C471;
                 st.success(f"Delivery updated successfully for {cust_name} ✅")
 
                                 # ===== FETCH UPDATED DATA FROM DB =====
+
                 bill_query = """
-                    SELECT masala_name, qty_del, rate
+                    SELECT
+                        masala_name,
+                        qty_del,
+                        rate
                     FROM masala_order
                     WHERE cust_name = %s
                     AND status IN ('Delivered','Partial')
                     AND business_date_del = CURRENT_DATE
                 """
-                bill_df = pd.read_sql(bill_query, connection, params=(cust_name,))
-
+                
+                bill_df = pd.read_sql(
+                    bill_query,
+                    connection,
+                    params=(cust_name,)
+                )
+                
                 if bill_df.empty:
+                
                     st.warning("No delivered items found for billing")
+                
                     st.stop()
-
-                # ===== PREPARE DATA =====
+                
+                # =====================================================
+                # ================= PREPARE TABLE DATA =================
+                # =====================================================
+                
                 total = 0
-                table_data = [["Masala", "Qty", "Rate", "Amount"]]
-
+                
+                table_data = [[
+                    "Masala Name",
+                    "Quantity",
+                    "Rate",
+                    "Amount"
+                ]]
+                
                 for _, row in bill_df.iterrows():
+                
                     amount = row["qty_del"] * row["rate"]
+                
                     total += amount
-
+                
                     table_data.append([
                         row["masala_name"],
                         int(row["qty_del"]),
                         f"₹ {row['rate']:.2f}",
                         f"₹ {amount:.2f}"
                     ])
-
-                table_data.append(["", "", "Total", f"₹ {total:.2f}"])
-
-                # ===== GENERATE PDF =====
+                
+                # ===== TOTAL ROW =====
+                
+                table_data.append([
+                    "",
+                    "",
+                    "TOTAL",
+                    f"₹ {total:.2f}"
+                ])
+                
+                # =====================================================
+                # ================= GENERATE PDF ======================
+                # =====================================================
+                
                 from io import BytesIO
-                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                
+                from reportlab.platypus import (
+                    SimpleDocTemplate,
+                    Table,
+                    TableStyle,
+                    Paragraph,
+                    Spacer
+                )
+                
                 from reportlab.lib import colors
                 from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units import inch
                 
-
                 buffer = BytesIO()
-                doc = SimpleDocTemplate(buffer)
+                
+                # =====================================================
+                # ================= PDF DOCUMENT ======================
+                # =====================================================
+                
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=A4,
+                    rightMargin=30,
+                    leftMargin=30,
+                    topMargin=30,
+                    bottomMargin=20
+                )
+                
                 elements = []
+                
                 styles = getSampleStyleSheet()
-
-                # Title
-                elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
-                elements.append(Spacer(1, 10))
-
-                # Customer info
-                elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
-                elements.append(Paragraph(f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
-                elements.append(Spacer(1, 10))
-
-                # Table
-                table = Table(table_data)
-
+                
+                # =====================================================
+                # ================= TITLE =============================
+                # =====================================================
+                
+                title = Paragraph(
+                    "<font size=20><b>MASALA DELIVERY BILL</b></font>",
+                    styles['Title']
+                )
+                
+                elements.append(title)
+                
+                elements.append(Spacer(1, 20))
+                
+                # =====================================================
+                # ================= CUSTOMER INFO =====================
+                # =====================================================
+                
+                customer_info = f"""
+                <font size=12>
+                <b>Customer:</b> {cust_name}<br/>
+                <b>Date:</b> {datetime.now().strftime('%d-%m-%Y %H:%M')}
+                </font>
+                """
+                
+                elements.append(
+                    Paragraph(
+                        customer_info,
+                        styles['Normal']
+                    )
+                )
+                
+                elements.append(Spacer(1, 20))
+                
+                # =====================================================
+                # ================= FULL WIDTH TABLE ==================
+                # =====================================================
+                
+                table = Table(
+                
+                    table_data,
+                
+                    colWidths=[
+                    
+                        3.5 * inch,
+                        1.2 * inch,
+                        1.2 * inch,
+                        1.5 * inch
+                    ]
+                )
+                
+                # =====================================================
+                # ================= TABLE STYLE =======================
+                # =====================================================
+                
                 table.setStyle(TableStyle([
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
-                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                
+                    # ===== HEADER =====
+                
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
+                
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                
+                    ('FONTSIZE', (0, 0), (-1, 0), 13),
+                
+                    # ===== BODY =====
+                
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                
+                    ('FONTSIZE', (0, 1), (-1, -1), 11),
+                
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                
+                    # ===== TOTAL ROW =====
+                
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+                
+                    # ===== GRID =====
+                
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                
+                    # ===== PADDING =====
+                
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                
+                    # ===== ROW BACKGROUND =====
+                
+                    ('BACKGROUND', (0, 1), (-1, -2), colors.whitesmoke),
+                
                 ]))
-
+                
                 elements.append(table)
-
+                
+                elements.append(Spacer(1, 30))
+                
+                # =====================================================
+                # ================= FOOTER ============================
+                # =====================================================
+                
+                footer = Paragraph(
+                    "<font size=11><b>Thank You Visit Again</b></font>",
+                    styles['Normal']
+                )
+                
+                elements.append(footer)
+                
+                # =====================================================
+                # ================= BUILD PDF =========================
+                # =====================================================
+                
                 doc.build(elements)
+                
                 buffer.seek(0)
-
-                # ===== DOWNLOAD BUTTON =====
+                
+                # =====================================================
+                # ================= DOWNLOAD BUTTON ===================
+                # =====================================================
+                
                 st.download_button(
                     label="📄 Download Bill PDF",
                     data=buffer,
                     file_name=f"{cust_name}_bill.pdf",
                     mime="application/pdf"
                 )
+
+
+                # bill_query = """
+                #     SELECT masala_name, qty_del, rate
+                #     FROM masala_order
+                #     WHERE cust_name = %s
+                #     AND status IN ('Delivered','Partial')
+                #     AND business_date_del = CURRENT_DATE
+                # """
+                # bill_df = pd.read_sql(bill_query, connection, params=(cust_name,))
+
+                # if bill_df.empty:
+                #     st.warning("No delivered items found for billing")
+                #     st.stop()
+
+                # # ===== PREPARE DATA =====
+                # total = 0
+                # table_data = [["Masala", "Qty", "Rate", "Amount"]]
+
+                # for _, row in bill_df.iterrows():
+                #     amount = row["qty_del"] * row["rate"]
+                #     total += amount
+
+                #     table_data.append([
+                #         row["masala_name"],
+                #         int(row["qty_del"]),
+                #         f"₹ {row['rate']:.2f}",
+                #         f"₹ {amount:.2f}"
+                #     ])
+
+                # table_data.append(["", "", "Total", f"₹ {total:.2f}"])
+
+                # # ===== GENERATE PDF =====
+                # from io import BytesIO
+                # from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                # from reportlab.lib import colors
+                # from reportlab.lib.styles import getSampleStyleSheet
+                
+
+                # buffer = BytesIO()
+                # doc = SimpleDocTemplate(buffer)
+                # elements = []
+                # styles = getSampleStyleSheet()
+
+                # # Title
+                # elements.append(Paragraph("🧾 MASALA DELIVERY BILL", styles['Title']))
+                # elements.append(Spacer(1, 10))
+
+                # # Customer info
+                # elements.append(Paragraph(f"Customer: {cust_name}", styles['Normal']))
+                # elements.append(Paragraph(f"Date: {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles['Normal']))
+                # elements.append(Spacer(1, 10))
+
+                # # Table
+                # table = Table(table_data)
+
+                # table.setStyle(TableStyle([
+                #     ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                #     ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                #     ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                #     ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                # ]))
+
+                # elements.append(table)
+
+                # doc.build(elements)
+                # buffer.seek(0)
+
+                # # ===== DOWNLOAD BUTTON =====
+                # st.download_button(
+                #     label="📄 Download Bill PDF",
+                #     data=buffer,
+                #     file_name=f"{cust_name}_bill.pdf",
+                #     mime="application/pdf"
+                # )
 
         # ================= CANCEL ORDER =================
         with btn2:
@@ -654,7 +882,8 @@ background-color:#F8C471;
 
             st.markdown(f"### 💰 Total: ₹ {total:.2f}")
 
-            # -------- GENERATE PDF --------
+
+                        # -------- GENERATE PDF --------
 
             if st.button("📄 Generate & Download Delivered Bill"):
 
@@ -668,90 +897,178 @@ background-color:#F8C471;
 
                 from reportlab.lib import colors
                 from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units import inch
                 from io import BytesIO
 
                 buffer = BytesIO()
 
-                doc = SimpleDocTemplate(buffer)
+                # =====================================================
+                # ================= PDF DOCUMENT ======================
+                # =====================================================
+
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=A4,
+                    rightMargin=30,
+                    leftMargin=30,
+                    topMargin=30,
+                    bottomMargin=20
+                )
 
                 elements = []
 
                 styles = getSampleStyleSheet()
 
-                # ===== TITLE =====
+                # =====================================================
+                # ================= TITLE =============================
+                # =====================================================
 
-                elements.append(
-                    Paragraph(
-                        "MASALA DELIVERY BILL",
-                        styles['Title']
-                    )
+                title = Paragraph(
+                    "<font size=20><b>MASALA DELIVERY BILL</b></font>",
+                    styles['Title']
                 )
 
-                elements.append(Spacer(1, 10))
+                elements.append(title)
 
-                # ===== CUSTOMER =====
+                elements.append(Spacer(1, 20))
+
+                # =====================================================
+                # ================= CUSTOMER INFO =====================
+                # =====================================================
+
+                customer_info = f"""
+                <font size=12>
+                <b>Customer:</b> {cust_name}<br/>
+                <b>Delivery Date:</b> {selected_date}
+                </font>
+                """
 
                 elements.append(
-                    Paragraph(
-                        f"Customer: {cust_name}",
-                        styles['Normal']
-                    )
+                    Paragraph(customer_info, styles['Normal'])
                 )
 
-                elements.append(
-                    Paragraph(
-                        f"Delivery Date: {selected_date}",
-                        styles['Normal']
-                    )
-                )
+                elements.append(Spacer(1, 20))
 
-                elements.append(Spacer(1, 10))
+                # =====================================================
+                # ================= TABLE DATA ========================
+                # =====================================================
 
-                # ===== TABLE =====
+                table_data = []
 
-                table_data = [
-                    ["Masala", "Qty", "Rate", "Amount"]
-                ]
+                # Header Row
+                table_data.append([
+                    "Masala Name",
+                    "Quantity",
+                    "Rate",
+                    "Amount"
+                ])
 
+                # Data Rows
                 for row in display_data:
-
+                
                     table_data.append([
                         row["Masala"],
-                        row["Qty"],
+                        str(row["Qty"]),
                         row["Rate"],
                         row["Amount"]
                     ])
 
+                # Total Row
                 table_data.append([
                     "",
                     "",
-                    "Total",
+                    "TOTAL",
                     f"₹ {total:.2f}"
                 ])
 
-                table = Table(table_data)
+                # =====================================================
+                # ================= FULL PAGE TABLE ===================
+                # =====================================================
+
+                table = Table(
+                    table_data,
+
+                    # Full Width Columns
+                    colWidths=[
+                        3.5 * inch,
+                        1.2 * inch,
+                        1.2 * inch,
+                        1.5 * inch
+                    ]
+                )
+
+                # =====================================================
+                # ================= TABLE STYLE =======================
+                # =====================================================
 
                 table.setStyle(TableStyle([
+                
+                    # Header Background
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
 
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
+                    # Header Text Color
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
 
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    # Header Font
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
 
-                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
+                    # Header Font Size
+                    ('FONTSIZE', (0, 0), (-1, 0), 13),
 
-                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+                    # Body Font
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
 
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    # Body Font Size
+                    ('FONTSIZE', (0, 1), (-1, -1), 11),
 
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+                    # Alignment
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+
+                    # Total Row Bold
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+
+                    # Total Row Background
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+
+                    # Grid
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+
+                    # Padding
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+
+                    # Alternate Row Background
+                    ('BACKGROUND', (0, 1), (-1, -2), colors.whitesmoke),
 
                 ]))
 
                 elements.append(table)
 
+                elements.append(Spacer(1, 30))
+
+                # =====================================================
+                # ================= FOOTER ============================
+                # =====================================================
+
+                footer = Paragraph(
+                    "<font size=11><b>Thank You Visit Again</b></font>",
+                    styles['Normal']
+                )
+
+                elements.append(footer)
+
+                # =====================================================
+                # ================= BUILD PDF =========================
+                # =====================================================
+
                 doc.build(elements)
 
                 buffer.seek(0)
+
+                # =====================================================
+                # ================= DOWNLOAD BUTTON ===================
+                # =====================================================
 
                 st.download_button(
                     label="⬇ Download Delivered PDF",
@@ -887,7 +1204,7 @@ background-color:#F8C471;
             # -------- GENERATE PDF --------
 
             if st.button("📄 Generate & Download Pending Bill"):
-
+            
                 from reportlab.platypus import (
                     SimpleDocTemplate,
                     Table,
@@ -895,100 +1212,292 @@ background-color:#F8C471;
                     Paragraph,
                     Spacer
                 )
-
+        
                 from reportlab.lib import colors
                 from reportlab.lib.styles import getSampleStyleSheet
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib.units import inch
                 from io import BytesIO
-
+        
                 buffer = BytesIO()
-
-                doc = SimpleDocTemplate(buffer)
-
+        
+                # ===== A4 PAGE WITH MARGINS =====
+        
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=A4,
+                    rightMargin=30,
+                    leftMargin=30,
+                    topMargin=30,
+                    bottomMargin=20
+                )
+        
                 elements = []
-
+        
                 styles = getSampleStyleSheet()
-
-                # ===== TITLE =====
-
-                elements.append(
-                    Paragraph(
-                        "MASALA PENDING BILL",
-                        styles['Title']
-                    )
+        
+                # =====================================================
+                # ================= TITLE =============================
+                # =====================================================
+        
+                title = Paragraph(
+                    "<font size=20><b>MASALA PENDING BILL</b></font>",
+                    styles['Title']
                 )
-
-                elements.append(Spacer(1, 10))
-
-                # ===== CUSTOMER =====
-
+        
+                elements.append(title)
+        
+                elements.append(Spacer(1, 20))
+        
+                # =====================================================
+                # ================= CUSTOMER INFO =====================
+                # =====================================================
+        
+                customer_info = f"""
+                <font size=12>
+                <b>Customer:</b> {cust_name}<br/>
+                <b>Pending Date:</b> {selected_pending_date}
+                </font>
+                """
+        
                 elements.append(
-                    Paragraph(
-                        f"Customer: {cust_name}",
-                        styles['Normal']
-                    )
+                    Paragraph(customer_info, styles['Normal'])
                 )
-
-                elements.append(
-                    Paragraph(
-                        f"Pending Date: {selected_pending_date}",
-                        styles['Normal']
-                    )
-                )
-
-                elements.append(Spacer(1, 10))
-
-                # ===== TABLE =====
-
-                table_data = [
-                    ["Masala", "Qty", "Rate", "Amount"]
-                ]
-
+        
+                elements.append(Spacer(1, 20))
+        
+                # =====================================================
+                # ================= TABLE DATA ========================
+                # =====================================================
+        
+                table_data = []
+        
+                # Header
+                table_data.append([
+                    "Masala Name",
+                    "Quantity",
+                    "Rate",
+                    "Amount"
+                ])
+        
+                # Data Rows
                 for row in pending_display_data:
-
+                
                     table_data.append([
                         row["Masala"],
-                        row["Qty"],
+                        str(row["Qty"]),
                         row["Rate"],
                         row["Amount"]
                     ])
-
+        
+                # Total Row
                 table_data.append([
                     "",
                     "",
-                    "Total",
+                    "TOTAL",
                     f"₹ {pending_total:.2f}"
                 ])
-
-                table = Table(table_data)
-
+        
+                # =====================================================
+                # ================= FULL WIDTH TABLE ==================
+                # =====================================================
+        
+                table = Table(
+                    table_data,
+        
+                    # Full Page Width
+                    colWidths=[
+                        3.5 * inch,
+                        1.2 * inch,
+                        1.2 * inch,
+                        1.5 * inch
+                    ]
+                )
+        
+                # =====================================================
+                # ================= TABLE STYLE =======================
+                # =====================================================
+        
                 table.setStyle(TableStyle([
-
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.orange),
-
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-
-                    ("GRID", (0, 0), (-1, -1), 1, colors.black),
-
-                    ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
-
+                
+                    # Header Background
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.orange),
+        
+                    # Header Text Color
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        
+                    # Header Font
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        
+                    # Header Font Size
+                    ('FONTSIZE', (0, 0), (-1, 0), 13),
+        
+                    # Body Font
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        
+                    # Body Font Size
+                    ('FONTSIZE', (0, 1), (-1, -1), 11),
+        
+                    # Alignment
+                    ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+        
+                    # Total Row Bold
+                    ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        
+                    # Total Row Background
+                    ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
+        
+                    # Grid
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        
+                    # Padding
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        
+                    # Alternate Row Colors
+                    ('BACKGROUND', (0, 1), (-1, -2), colors.whitesmoke),
+        
                 ]))
-
+        
                 elements.append(table)
-
+        
+                elements.append(Spacer(1, 30))
+        
+                # =====================================================
+                # ================= FOOTER ============================
+                # =====================================================
+        
+                footer = Paragraph(
+                    "<font size=11><b>Your product will be delivered soon</b></font>",
+                    styles['Normal']
+                )
+        
+                elements.append(footer)
+        
+                # =====================================================
+                # ================= BUILD PDF =========================
+                # =====================================================
+        
                 doc.build(elements)
-
+        
                 buffer.seek(0)
-
+        
+                # =====================================================
+                # ================= DOWNLOAD BUTTON ===================
+                # =====================================================
+        
                 st.download_button(
                     label="⬇ Download Pending PDF",
                     data=buffer,
                     file_name=f"{cust_name}_{selected_pending_date}_pending_bill.pdf",
                     mime="application/pdf"
-                )    
+                )
+
+            # # -------- GENERATE PDF --------
+
+            # if st.button("📄 Generate & Download Pending Bill"):
+
+            #     from reportlab.platypus import (
+            #         SimpleDocTemplate,
+            #         Table,
+            #         TableStyle,
+            #         Paragraph,
+            #         Spacer
+            #     )
+
+            #     from reportlab.lib import colors
+            #     from reportlab.lib.styles import getSampleStyleSheet
+            #     from io import BytesIO
+
+            #     buffer = BytesIO()
+
+            #     doc = SimpleDocTemplate(buffer)
+
+            #     elements = []
+
+            #     styles = getSampleStyleSheet()
+
+            #     # ===== TITLE =====
+
+            #     elements.append(
+            #         Paragraph(
+            #             "MASALA PENDING BILL",
+            #             styles['Title']
+            #         )
+            #     )
+
+            #     elements.append(Spacer(1, 10))
+
+            #     # ===== CUSTOMER =====
+
+            #     elements.append(
+            #         Paragraph(
+            #             f"Customer: {cust_name}",
+            #             styles['Normal']
+            #         )
+            #     )
+
+            #     elements.append(
+            #         Paragraph(
+            #             f"Pending Date: {selected_pending_date}",
+            #             styles['Normal']
+            #         )
+            #     )
+
+            #     elements.append(Spacer(1, 10))
+
+            #     # ===== TABLE =====
+
+            #     table_data = [
+            #         ["Masala", "Qty", "Rate", "Amount"]
+            #     ]
+
+            #     for row in pending_display_data:
+
+            #         table_data.append([
+            #             row["Masala"],
+            #             row["Qty"],
+            #             row["Rate"],
+            #             row["Amount"]
+            #         ])
+
+            #     table_data.append([
+            #         "",
+            #         "",
+            #         "Total",
+            #         f"₹ {pending_total:.2f}"
+            #     ])
+
+            #     table = Table(table_data)
+
+            #     table.setStyle(TableStyle([
+
+            #         ("BACKGROUND", (0, 0), (-1, 0), colors.orange),
+
+            #         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+
+            #         ("GRID", (0, 0), (-1, -1), 1, colors.black),
+
+            #         ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+
+            #         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+
+            #         ("BOTTOMPADDING", (0, 0), (-1, 0), 10),
+
+            #     ]))
+
+            #     elements.append(table)
+
+            #     doc.build(elements)
+
+            #     buffer.seek(0)
+
+            #     st.download_button(
+            #         label="⬇ Download Pending PDF",
+            #         data=buffer,
+            #         file_name=f"{cust_name}_{selected_pending_date}_pending_bill.pdf",
+            #         mime="application/pdf"
+            #     )    
 
        
     #     # ================= BILL PAGE =================
