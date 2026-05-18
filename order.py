@@ -113,72 +113,102 @@ background-color:#F8C471;
     cust_df = pd.read_sql(cust_query, connection)
 
 
-    
-
     # ================= ORDER PAGE =================
     if menu == "Order":
 
         cust_name = st.selectbox("Select Customer", cust_df["shop_name"])
 
-        with st.form("order_form", clear_on_submit=True):
+        # Initialize storage
+        if "order_values" not in st.session_state:
+            st.session_state.order_values = {}
 
-            st.subheader("Enter Order Details")
+        # Search box
+        search_text = st.text_input("🔍 Search Masala")
 
-            # Table Header
-            h1, h2, h3 = st.columns([1.5,1,1])
-            h1.markdown("**Masala Name**")
-            h2.markdown("**Qty**")
-            h3.markdown("**Rate**")
+        # Filter dataframe
+        if search_text:
+            filtered_df = df[
+                df["masala_name"].str.contains(search_text, case=False, na=False)
+            ]
+        else:
+            filtered_df = df
 
-            order_data = []
+        st.subheader("Enter Order Details")
 
-            for index, row in df.iterrows():
+        # Header
+        h1, h2, h3 = st.columns([2,1,1])
 
-                masala_id = row["id"]
-                masala_name = row["masala_name"]
+        h1.markdown("**Masala Name**")
+        h2.markdown("**Qty**")
+        h3.markdown("**Rate**")
 
-                col1, col2, col3 = st.columns([1.5,1,1])
+        # ================= DISPLAY ITEMS =================
+        for index, row in filtered_df.iterrows():
 
-                col1.text_input(
-                    "",
-                    value=masala_name,
-                    disabled=True,
-                    key=f"name_{masala_id}"
-                )
+            masala_id = str(row["id"])
+            masala_name = row["masala_name"]
 
-                qty = col2.number_input("", min_value=0, key=f"qty_{masala_id}")
-                rate = col3.number_input("", min_value=0, key=f"rate_{masala_id}")
+            # Create storage if not exists
+            if masala_id not in st.session_state.order_values:
 
-                amount = qty * rate
+                st.session_state.order_values[masala_id] = {
+                    "name": masala_name,
+                    "qty": 0,
+                    "rate": 0
+                }
 
-                order_data.append((masala_id, masala_name, qty, rate, amount))
+            col1, col2, col3 = st.columns([2,1,1])
 
-            # Submit button OUTSIDE loop
-            submit = st.form_submit_button("Submit Order")
+            col1.text_input(
+                "",
+                value=masala_name,
+                disabled=True,
+                key=f"name_{masala_id}"
+            )
 
+            qty = col2.number_input(
+                "",
+                min_value=0,
+                value=st.session_state.order_values[masala_id]["qty"],
+                key=f"qty_{masala_id}"
+            )
 
-        if submit:
+            rate = col3.number_input(
+                "",
+                min_value=0,
+                value=st.session_state.order_values[masala_id]["rate"],
+                key=f"rate_{masala_id}"
+            )
 
-            cursor = connection.cursor()
+            # Save latest values
+            st.session_state.order_values[masala_id]["qty"] = qty
+            st.session_state.order_values[masala_id]["rate"] = rate
+
+        # ================= SUBMIT =================
+        if st.button("Submit Order"):
 
             inserted = False
             error_found = False
 
-            for data in order_data:
+            cursor = connection.cursor()
 
-                masala_id, masala_name, qty, rate, amount = data
+            for masala_id, data in st.session_state.order_values.items():
+
+                masala_name = data["name"]
+                qty = data["qty"]
+                rate = data["rate"]
+
+                amount = qty * rate
 
                 # Skip empty rows
                 if qty == 0 and rate == 0:
                     continue
 
-                # Qty validation
                 if qty <= 0:
                     st.error(f"Quantity must be greater than 0 for {masala_name}")
                     error_found = True
                     continue
 
-                # Rate validation
                 if rate <= 0:
                     st.error(f"Rate must be greater than 0 for {masala_name}")
                     error_found = True
@@ -194,6 +224,7 @@ background-color:#F8C471;
                 """
 
                 cursor.execute(check_query, (cust_name, masala_name))
+
                 count = cursor.fetchone()[0]
 
                 if count > 0:
@@ -204,13 +235,22 @@ background-color:#F8C471;
 
                     insert_query = """
                     INSERT INTO masala_order
-                    (id, cust_name, masala_name, qty, rate, amount, business_date, order_time)
-                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_DATE, CURRENT_TIMESTAMP)
+                    (id, cust_name, masala_name, qty, rate, amount,
+                     business_date, order_time)
+                    VALUES (%s, %s, %s, %s, %s, %s,
+                            CURRENT_DATE, CURRENT_TIMESTAMP)
                     """
 
                     cursor.execute(
                         insert_query,
-                        (masala_id, cust_name, masala_name, qty, rate, amount)
+                        (
+                            masala_id,
+                            cust_name,
+                            masala_name,
+                            qty,
+                            rate,
+                            amount
+                        )
                     )
 
                     inserted = True
@@ -220,8 +260,124 @@ background-color:#F8C471;
 
             if inserted:
                 st.success("Order Inserted Successfully")
-            else:
-                st.error("Please enter valid Qty and Rate")
+
+                # Clear session after submit
+                st.session_state.order_values = {}
+
+    # # ================= ORDER PAGE =================
+    # if menu == "Order":
+
+    #     cust_name = st.selectbox("Select Customer", cust_df["shop_name"])
+
+
+    #     # 🔍 Search Box
+    #     search_text = st.text_input("🔍 Search Masala")
+
+
+    #     with st.form("order_form", clear_on_submit=True):
+
+    #         st.subheader("Enter Order Details")
+
+    #         # Table Header
+    #         h1, h2, h3 = st.columns([1.5,1,1])
+    #         h1.markdown("**Masala Name**")
+    #         h2.markdown("**Qty**")
+    #         h3.markdown("**Rate**")
+
+    #         order_data = []
+
+    #         for index, row in filtered_df.iterrows():
+
+    #             masala_id = row["id"]
+    #             masala_name = row["masala_name"]
+
+
+
+    #             col1, col2, col3 = st.columns([1.5,1,1])
+
+    #             col1.text_input(
+    #                 "",
+    #                 value=masala_name,
+    #                 disabled=True,
+    #                 key=f"name_{masala_id}"
+    #             )
+
+    #             qty = col2.number_input("", min_value=0, key=f"qty_{masala_id}")
+    #             rate = col3.number_input("", min_value=0, key=f"rate_{masala_id}")
+
+    #             amount = qty * rate
+
+    #             order_data.append((masala_id, masala_name, qty, rate, amount))
+
+    #         # Submit button OUTSIDE loop
+    #         submit = st.form_submit_button("Submit Order")
+
+
+    #     if submit:
+
+    #         cursor = connection.cursor()
+
+    #         inserted = False
+    #         error_found = False
+
+    #         for data in order_data:
+
+    #             masala_id, masala_name, qty, rate, amount = data
+
+    #             # Skip empty rows
+    #             if qty == 0 and rate == 0:
+    #                 continue
+
+    #             # Qty validation
+    #             if qty <= 0:
+    #                 st.error(f"Quantity must be greater than 0 for {masala_name}")
+    #                 error_found = True
+    #                 continue
+
+    #             # Rate validation
+    #             if rate <= 0:
+    #                 st.error(f"Rate must be greater than 0 for {masala_name}")
+    #                 error_found = True
+    #                 continue
+
+    #             # Duplicate check
+    #             check_query = """
+    #             SELECT COUNT(*)
+    #             FROM masala_order
+    #             WHERE cust_name = %s
+    #             AND masala_name = %s
+    #             AND business_date = CURRENT_DATE
+    #             """
+
+    #             cursor.execute(check_query, (cust_name, masala_name))
+    #             count = cursor.fetchone()[0]
+
+    #             if count > 0:
+
+    #                 st.warning(f"{masala_name} already ordered today")
+
+    #             else:
+
+    #                 insert_query = """
+    #                 INSERT INTO masala_order
+    #                 (id, cust_name, masala_name, qty, rate, amount, business_date, order_time)
+    #                 VALUES (%s, %s, %s, %s, %s, %s, CURRENT_DATE, CURRENT_TIMESTAMP)
+    #                 """
+
+    #                 cursor.execute(
+    #                     insert_query,
+    #                     (masala_id, cust_name, masala_name, qty, rate, amount)
+    #                 )
+
+    #                 inserted = True
+
+    #         if not error_found:
+    #             connection.commit()
+
+    #         if inserted:
+    #             st.success("Order Inserted Successfully")
+    #         else:
+    #             st.error("Please enter valid Qty and Rate")
 
 
     # ================= UPDATE PAGE =================
