@@ -286,7 +286,7 @@ background-color:#F8C471;
 
     #         order_data = []
 
-    #         for index, row in filtered_df.iterrows():
+    #         for index, row in df.iterrows():
 
     #             masala_id = row["id"]
     #             masala_name = row["masala_name"]
