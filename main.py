@@ -7,6 +7,8 @@ from record import records
 from user_management import login, create_user
 
 
+
+
 # Session Initialization
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
