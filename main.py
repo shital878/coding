@@ -1,5 +1,4 @@
 import streamlit as st
-
 from masala_master import masala_master
 from outlet_onboarding import outlet_onaboard
 from order import order_details
@@ -15,6 +14,7 @@ if "logged_in" not in st.session_state:
 
 if "role" not in st.session_state:
     st.session_state.role = None
+    # st.session_state.role = None
 
 if "username" not in st.session_state:
     st.session_state.username = None
@@ -27,6 +27,7 @@ if "username" not in st.session_state:
 if not st.session_state.logged_in:
 
     login()
+ 
 
     # IMPORTANT
     st.stop()
@@ -79,3 +80,4 @@ elif menu == "Records":
 
 elif menu == "User Management":
     create_user()
+
